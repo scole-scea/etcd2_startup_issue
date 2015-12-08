@@ -13,6 +13,22 @@ set -eo pipefail
 
 #set -x
 
+# Get some image info
+case "$1" in
+  beta)
+    image_opts="--image=$(gcloud compute images list --format='value(name)' --regex=coreos-beta.*) --image-project=coreos-cloud"
+    log_opts="-t etcd2"
+    ;;
+  alpha)
+    image_opts="--image=$(gcloud compute images list --format='value(name)' --regex=coreos-alpha.*) --image-project=coreos-cloud"
+    log_opts="-t etcd2"
+    ;;
+  *)
+    image_opts="--image=$(gcloud compute images list --format='value(name)' --regex=coreos-stable.*) --image-project=coreos-cloud"
+    log_opts="-u etcd2.service"
+    ;;
+esac
+
 token=$(curl -s https://discovery.etcd.io/new?size=3)
 
 cat << EOF > cloud-config.txt
@@ -47,7 +63,7 @@ gcloud compute instances create trouble-etcd-{a..e}                             
                                 --zone=us-central1-a                                       \
                                 --metadata-from-file=user-data=cloud-config.txt            \
                                 --network=trouble                                          \
-                                --image=coreos                                             \
+                                $image_opts                                                \
                                 --scopes=bigquery,datastore,sql,storage-rw,userinfo-email  \
                                 --machine-type=n1-standard-1                               \
                                 --maintenance-policy=MIGRATE &
@@ -79,7 +95,7 @@ done
 if [ -n "$failing" ]; then
   echo
   echo "#### Grab a log"
-  gcloud compute ssh $(echo $failing | cut -d ' ' -f 1) --ssh-flag=-q --ssh-flag=-A --zone=us-central1-a --command="sudo journalctl -u etcd2.service"
+  gcloud compute ssh $(echo $failing | cut -d ' ' -f 1) --ssh-flag=-q --ssh-flag=-A --zone=us-central1-a --command="sudo journalctl $log_opts"
 fi
 
 echo
